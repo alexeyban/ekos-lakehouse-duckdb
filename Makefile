@@ -24,6 +24,8 @@ seed:            ## the iDempiere 12 seed (GardenWorld), dumped once from a runn
 venv:            ## dbt-duckdb and duckdb on the host, for `lakehouse gold publish`
 	test -x $(EKOS_DEMO_DATA)/venv/bin/dbt || { python3 -m venv $(EKOS_DEMO_DATA)/venv && \
 	  $(EKOS_DEMO_DATA)/venv/bin/pip install -q dbt-duckdb==1.11.1 duckdb==1.5.6 dbt-trino==1.10.6 trino==0.340.0 pyyaml; }
+	@# RFC 0260: a mart edit's gates load these on the host (they are never auto-installed there)
+	$(EKOS_DEMO_DATA)/venv/bin/python -c "import duckdb; duckdb.sql('INSTALL httpfs; INSTALL iceberg')"
 
 demo-up: seed
 	$(COMPOSE) up -d --wait lh-source lh-seaweedfs lh-polaris lh-trino

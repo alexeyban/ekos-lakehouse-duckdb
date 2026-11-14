@@ -203,6 +203,46 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 12 completed AR credit memos in 2026 (doc type 118, AR Credit Memo), one per month January–November and
+-- a second in November: each credits one unit of the first line of a synthetic sales invoice of that
+-- month. iDempiere stores a credit memo's amounts positive; its document base type (ARC) says it is a
+-- credit. A mart that sums invoice lines of completed customer documents without looking at the type
+-- counts them as revenue: chapter 9's scenario C2 ("revenue must exclude credit memos") corrects it.
+-- They are settled (ispaid = 'Y'), so open receivables are not affected.
+DO $$
+DECLARE
+  marker CONSTANT text := 'synthetic (ekos-lakehouse-duckdb) credit memo';
+  src record; l record; n int := 0; cm int := 5950000; cml int := 5950000; amt numeric; rate numeric;
+BEGIN
+  FOR src IN
+    SELECT * FROM (
+      SELECT i.*, row_number() OVER (PARTITION BY date_trunc('month', i.dateinvoiced) ORDER BY i.c_invoice_id) AS k
+        FROM c_invoice i
+       WHERE i.description = 'synthetic (ekos-lakehouse-duckdb)' AND i.issotrx = 'Y'
+         AND i.dateinvoiced >= DATE '2026-01-01') x
+     WHERE k = 1 OR (k = 2 AND dateinvoiced >= DATE '2026-11-01')
+     ORDER BY c_invoice_id LOOP
+    n := n + 1; cm := cm + 1; cml := cml + 1;
+    SELECT * INTO l FROM c_invoiceline WHERE c_invoice_id = src.c_invoice_id ORDER BY line LIMIT 1;
+    amt := l.priceactual;
+    rate := CASE WHEN src.totallines = 0 THEN 0 ELSE (src.grandtotal - src.totallines) / src.totallines END;
+    PERFORM pg_temp.copy_row('c_invoice', to_jsonb(src) - 'k', jsonb_build_object(
+      'c_invoice_id', cm, 'c_invoice_uu', md5('cmemo' || cm)::uuid::text,
+      'documentno', 'CM' || (680000 + n), 'description', marker,
+      'c_doctype_id', 118, 'c_doctypetarget_id', 118, 'c_order_id', NULL,
+      'dateinvoiced', src.dateinvoiced + 5, 'dateacct', src.dateinvoiced + 5,
+      'totallines', amt, 'grandtotal', round(amt * (1 + rate), 2), 'ispaid', 'Y'));
+    INSERT INTO c_invoiceline SELECT (jsonb_populate_record(NULL::c_invoiceline, to_jsonb(l) || jsonb_build_object(
+        'c_invoiceline_id', cml, 'c_invoiceline_uu', md5('cmline' || cml)::uuid::text,
+        'c_invoice_id', cm, 'c_orderline_id', NULL, 'line', 10,
+        'qtyinvoiced', 1, 'qtyentered', 1, 'linenetamt', amt, 'linetotalamt', amt))).*;
+    INSERT INTO c_invoicetax SELECT (jsonb_populate_record(NULL::c_invoicetax, to_jsonb(t) || jsonb_build_object(
+        'c_invoice_id', cm, 'c_invoicetax_uu', md5('cmtax' || cm)::uuid::text,
+        'taxbaseamt', amt, 'taxamt', round(amt * rate, 2)))).*
+      FROM c_invoicetax t WHERE t.c_invoice_id = src.c_invoice_id;
+  END LOOP;
+END $$;
+
 -- 30 draft customer invoices (docstatus DR, not processed), copies of the latest 30 synthetic sales
 -- invoices (October–November 2026) with their lines and tax. No mart reads a draft (every mart filters
 -- docstatus = 'CO'); they are there so that chapter 9's scenario A5 can delete them in the source

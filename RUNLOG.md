@@ -157,3 +157,11 @@ Every deviation, failure and fix of the demo runs, in order. Command output is i
   293 transactions / 18172 points; completing a draft posts one more (the trigger needed
   `SET search_path = adempiere` on the functions: a session without it did not find xx_loyalty_post).
 - `make change-a`, `make change-b`.
+- 2026-11-14T21:07:41Z user approved: make demo-reset (pass 2 volumes removed, home to trash), pass 3 with persistent Polaris and the drafts, then make snapshot NAME=chapter8.
+- Pass 3 stopped in step 1 (user decision): the synthetic data gets 12 completed AR credit memos (doc type
+  118) in 2026, so scenario C2 ("revenue must exclude credit memos") changes the total. Each credits one
+  unit of the first line of a synthetic sales invoice; stored positive as iDempiere does; settled (ispaid Y).
+  Their lines add 423.15 to 2026 sales lines on day one. Tested twice on scratch restores: identical.
+  Also: demo.env names the variables the DuckDB edit gates read (RFC 0260), `make venv` installs DuckDB
+  1.5.6's httpfs and iceberg extensions on the host (only 1.5.5's were there).
+- Pass 3 restarted from `make demo-reset`.
