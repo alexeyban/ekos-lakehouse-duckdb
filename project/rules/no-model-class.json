@@ -1,0 +1,10 @@
+{
+  "name": "no-model-class",
+  "rationale": "The table exists in the database. Translation (_trl), log and access tables have no generated model class in iDempiere; the database is the authority on what exists.",
+  "match": {
+    "conflict_type": "table_without_model"
+  },
+  "decision": {
+    "pick_source": "database"
+  }
+}

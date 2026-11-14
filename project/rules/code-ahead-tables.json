@@ -1,0 +1,8 @@
+{
+  "name": "code-ahead-tables",
+  "rationale": "Tables of later releases (iD13) the iD11 database has not been migrated to. Each side describes its own release.",
+  "match": {
+    "conflict_type": "model_table_missing"
+  },
+  "decision": "both_valid"
+}

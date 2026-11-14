@@ -1,0 +1,8 @@
+{
+  "name": "app-enforced",
+  "rationale": "iDempiere enforces 'mandatory' in the application (the model class), not with NOT NULL in the database. Both are true; the lakehouse types the column as the database does, nullable.",
+  "match": {
+    "conflict_type": "mandatory_but_nullable"
+  },
+  "decision": "both_valid"
+}

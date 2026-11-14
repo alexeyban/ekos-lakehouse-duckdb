@@ -1,0 +1,3 @@
+# Run logs: local records (tens of MB of compiler warnings per step); RUNLOG.md cites them.
+runs/
+scripts/__pycache__/

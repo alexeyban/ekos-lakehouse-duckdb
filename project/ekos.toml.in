@@ -1,0 +1,101 @@
+# The EKOS project behind this demo: iDempiere's code, its documentation site and the GardenWorld
+# database on PostgreSQL (stack/, service lh-source). `make project` renders this file into the
+# demo's EKOS home with the paths from stack/demo.env. No [llm] section: steps 1–3 make no model call.
+
+[workspace]
+root = "${IDEMPIERE_SRC}"                 # git clone https://github.com/idempiere/idempiere
+log-level = "info"
+
+[observe]
+paths = ["."]
+git-max-commits = 20000                    # iDempiere's history is long; the default reads 500
+ignore-patterns = [".ekos", ".git", "target", "node_modules"]
+
+# iDempiere ships one script tree per engine; the directory says which.
+[recover.sql]
+default-dialect = "postgres"
+[[recover.sql.dialect-rules]]
+path-glob = "**/oracle/**"
+dialect = "oracle"
+[[recover.sql.dialect-rules]]
+path-glob = "**/postgresql/**"
+dialect = "postgres"
+
+# Ticket keys in commit messages and migration script names (EKOS RFC 0219).
+[tickets]
+keys = ["IDEMPIERE", "TICKET"]
+
+# Business semantics (EKOS RFC 0170): code values, their meaning, the gaps. Needed for the
+# data signals of step 3 (code values measured against the data).
+[semantics]
+enabled = true
+
+[[sources]]
+name = "idempiere"
+kind = "git"
+path = "${IDEMPIERE_SRC}"
+
+[[sources]]
+name = "docs"
+kind = "git"
+path = "${IDEMPIERE_DOCS}"                 # git clone https://github.com/idempiere/idempiere.github.io
+
+# The live source: only the variable's NAME, never the password.
+[[databases]]
+name = "idempiere-db"
+kind = "postgres"
+connect = "127.0.0.1:55470/idempiere"
+user = "ekos_ro"
+password-env = "EKOS_SOURCE_PASSWORD"
+owners = ["adempiere"]
+profile = "p2"
+dictionary = "idempiere"                   # AD_Table flags: deleteable, change log
+
+# The published marts (EKOS RFC 0259) are added at step 8, once step 7 has published the file:
+#   ekos-lakehouse --project idemduck database add gold --kind duckdb --owner gold_idem --profile p1 \
+#     --path <project>/pipeline/.lakehouse/marts/marts.duckdb
+# (a [[databases]] entry whose file does not exist yet stops `ekos build`).
+
+# The schema comments and routines come from iDempiere's GPL-2.0 migration scripts.
+[docs-estate]
+licences = { "idempiere-db" = "GPL-2.0" }
+
+# ── Steps 4–7: EKOS Lakehouse ──────────────────────────────────────────────────────────────────
+[extensions.lakehouse]
+require-signoff = true                     # steps 4–7 refuse to write without step 3 signed off
+require-plan-approval = true               # generate builds only the plan step 5 approved
+trino-url = "http://127.0.0.1:58180"
+polaris-health-url = "http://127.0.0.1:58282/q/health"
+s3-url = "http://127.0.0.1:58433"
+dagster-url = "http://127.0.0.1:53200"
+source-engine = "postgres"
+source = "127.0.0.1:55470"
+source-database = "idempiere"
+source-user = "ekos_ro"
+source-password-env = "EKOS_SOURCE_PASSWORD"
+source-catalog = "idempiere"               # stack/trino/catalog/idempiere.properties
+schemas = ["adempiere"]
+namespace-prefix = "bronze_idem_"
+application-watermark = "updated"          # iDempiere stamps every write it makes
+
+[extensions.lakehouse.gold]
+engine = "duckdb"
+catalog-url = "http://127.0.0.1:58281/api/catalog"
+warehouse = "lakehouse"
+# dbt and python3 from PATH: the build runs in the Dagster image (dbt-duckdb 1.11.1, duckdb 1.5.6);
+# a command run on the host finds the same versions in the demo venv (scripts/run.sh puts it first).
+
+# Step 4: the one model call of the workflow, on a local model.
+[llm.tasks.requirements]
+provider = "ollama"
+model = "llama3"
+context-window = 8192
+
+# Step 9: dashboard health (EKOS RFC 0258) over the dashboards Ask builds in Superset.
+[extensions.lakehouse.dashboards]
+superset-url = "http://127.0.0.1:18098"
+superset-user = "maria"
+superset-password-env = "DEMO_SUPERSET_PASSWORD"   # the variable's name; its value is in stack/demo.env
+superset-database-id = 1                           # the `marts` connection (scripts/superset-init.sh)
+superset-schema = "gold_idem"
+superset-header = true                             # write each dashboard's health onto it

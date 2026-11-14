@@ -1,0 +1,204 @@
+# EKOS Lakehouse + DuckDB demo: the whole stack on one machine.
+#
+#   make demo-up      (docker compose -f stack/docker-compose.yml --env-file stack/demo.env up -d)
+#   make demo-reset   (down -v: drops the source copy, Iceberg files and the marts)
+#
+# iDempiere on PostgreSQL (restored from seed/idempiere.dump) → Trino → Iceberg tables in Polaris,
+# files in SeaweedFS (bronze, silver) → dbt-duckdb → one DuckDB file of marts → Superset (EKOS fork).
+# EKOS and its MCP server run on the host and never move a row.
+#
+# Service names are the ekos-lakehouse sandbox's (`lh-*`): its Polaris setup script and Iceberg
+# catalog file name them. Ports differ from that sandbox so both can run at once. Every port is on
+# loopback; every credential is a local-only default from demo.env.
+name: ekos-duckdemo
+
+x-s3-env: &s3-env
+  AWS_ACCESS_KEY_ID: ${EKOS_LH_S3_KEY}
+  AWS_SECRET_ACCESS_KEY: ${EKOS_LH_S3_SECRET}
+  AWS_REGION: us-east-1
+
+services:
+  lh-source:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: ${EKOS_SOURCE_ADMIN_PASSWORD}
+      EKOS_SOURCE_PASSWORD: ${EKOS_SOURCE_PASSWORD}
+    command: ["postgres", "-c", "shared_preload_libraries=pg_stat_statements"]
+    ports:
+      - "127.0.0.1:55470:5432"
+    volumes:
+      - source-data:/var/lib/postgresql/data
+      - ./source/10-idempiere.sh:/docker-entrypoint-initdb.d/10-idempiere.sh:ro
+      - ./source/20-synthetic.sql:/synthetic/20-synthetic.sql:ro
+      - ${EKOS_DEMO_DATA}/seed:/seed:ro
+    mem_limit: 1g
+    healthcheck:
+      # Ready only once the seed is restored and the read-only role exists.
+      test: ["CMD-SHELL", "psql -U postgres -d idempiere -Atc \"SELECT 1 FROM pg_roles WHERE rolname = 'ekos_ro'\" | grep -q 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 60
+
+  lh-seaweedfs:
+    image: chrislusf/seaweedfs:4.48
+    command: server -dir=/data -s3 -s3.config=/etc/seaweedfs/s3.json -ip=lh-seaweedfs -ip.bind=0.0.0.0
+    ports:
+      - "127.0.0.1:58433:8333"   # S3 API
+    volumes:
+      - s3-data:/data
+      - ./seaweedfs/s3.json:/etc/seaweedfs/s3.json:ro
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:9333/cluster/status || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  lh-bucket:
+    image: amazon/aws-cli:2.36.44
+    depends_on:
+      lh-seaweedfs:
+        condition: service_healthy
+    environment:
+      <<: *s3-env
+      AWS_ENDPOINT_URL: http://lh-seaweedfs:8333
+    entrypoint: /bin/sh
+    command:
+      - -c
+      - >-
+        for i in $$(seq 1 30); do
+          aws s3api head-bucket --bucket lakehouse 2>/dev/null && exit 0;
+          aws s3 mb s3://lakehouse && exit 0;
+          sleep 2;
+        done; exit 1
+
+  # In-memory catalog, as in the ekos-lakehouse sandbox: restarting Polaris empties it and the
+  # Iceberg files in S3 are orphaned. `make demo-reset` starts from nothing for that reason.
+  lh-polaris:
+    image: apache/polaris:1.8.0
+    depends_on:
+      lh-bucket:
+        condition: service_completed_successfully
+    environment:
+      <<: *s3-env
+      POLARIS_BOOTSTRAP_CREDENTIALS: POLARIS,root,${EKOS_LH_POLARIS_SECRET}
+      polaris.realm-context.realms: POLARIS
+      quarkus.otel.sdk.disabled: "true"
+    ports:
+      - "127.0.0.1:58281:8181"   # REST catalog + management API
+      - "127.0.0.1:58282:8182"   # health
+    mem_limit: 1g
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "http://localhost:8182/q/health"]
+      interval: 3s
+      timeout: 10s
+      retries: 40
+      start_period: 10s
+
+  lh-polaris-setup:
+    image: alpine/curl:8.22.0
+    depends_on:
+      lh-polaris:
+        condition: service_healthy
+    environment:
+      CLIENT_ID: root
+      CLIENT_SECRET: ${EKOS_LH_POLARIS_SECRET}
+    volumes:
+      - ./polaris/create-catalog.sh:/create-catalog.sh:ro
+    entrypoint: /bin/sh
+    command: ["/create-catalog.sh"]
+
+  lh-trino:
+    image: trinodb/trino:483
+    depends_on:
+      lh-polaris-setup:
+        condition: service_completed_successfully
+      lh-source:
+        condition: service_healthy
+    environment:
+      <<: *s3-env
+      CLIENT_ID: root
+      CLIENT_SECRET: ${EKOS_LH_POLARIS_SECRET}
+      SOURCE_PASSWORD: ${EKOS_SOURCE_PASSWORD}
+    ports:
+      - "127.0.0.1:58180:8080"
+    volumes:
+      - ./trino/catalog:/etc/trino/catalog:ro
+    # The image sizes the heap at 80% of this limit; 2 GiB was too small for the full estate.
+    mem_limit: 6g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/v1/info | grep -q '\"starting\":false'"]
+      interval: 5s
+      timeout: 10s
+      retries: 60
+      start_period: 30s
+
+  # The orchestrator, over the pipeline repository `lakehouse generate` wrote into the project.
+  # Host network: it reaches every service at the loopback ports the project's ekos.toml names,
+  # and binds its UI to 127.0.0.1:53200. It runs as the host user (it writes the project's ledger).
+  lh-dagster:
+    image: ekos-duckdemo/dagster:1.13.26
+    profiles: ["orchestrator"]
+    network_mode: host
+    user: "${EKOS_LH_UID:-1000}:${EKOS_LH_GID:-1000}"
+    environment:
+      <<: *s3-env
+      EKOS_LH_PROJECT: ${EKOS_LH_PROJECT}
+      # A home project: the job runs every ekos-lakehouse command with `--project idemduck`, so it
+      # reads the project's state (sign-offs, plan approval) in the EKOS home.
+      EKOS_LH_PROJECT_NAME: idemduck
+      # `lakehouse sync` reads the live source catalog as ekos_ro (the variable ekos.toml names).
+      EKOS_SOURCE_PASSWORD: ${EKOS_SOURCE_PASSWORD}
+      EKOS_LH_TRINO_URL: http://127.0.0.1:58180
+      # The generated dbt profile reads host and port, not the URL; its default port is the
+      # lakehouse stack's 58080, which on this machine is ANOTHER stack's Trino.
+      EKOS_LH_TRINO_HOST: 127.0.0.1
+      EKOS_LH_TRINO_PORT: "58180"
+      EKOS_LAKEHOUSE_BIN: /usr/local/bin/ekos-lakehouse
+      EKOS_LH_PII_KEY: ${EKOS_LH_PII_KEY}
+      EKOS_LH_POLARIS_CLIENT_ID: root
+      EKOS_LH_POLARIS_CLIENT_SECRET: ${EKOS_LH_POLARIS_SECRET}
+      EKOS_HOME: ${EKOS_HOME}
+      DAGSTER_HOME: ${EKOS_LH_PROJECT}/.dagster
+      HOME: /tmp
+    volumes:
+      - ${EKOS_LH_PROJECT}:${EKOS_LH_PROJECT}
+      - ${EKOS_HOME}:${EKOS_HOME}
+      - ${EKOS_LAKEHOUSE_BIN}:/usr/local/bin/ekos-lakehouse:ro
+      # The project's sources, at the paths ekos.toml names: every `ekos-lakehouse --project` command
+      # (the sync and sign-off checks the job runs) opens the project's workspace root. Read-only.
+      - ${IDEMPIERE_SRC:?run through make, which sets it}:${IDEMPIERE_SRC}:ro
+      - ${IDEMPIERE_DOCS:?run through make, which sets it}:${IDEMPIERE_DOCS}:ro
+    command:
+      - sh
+      - -c
+      - mkdir -p "$$DAGSTER_HOME" && exec dagster dev -h 127.0.0.1 -p 53200 -f "$$EKOS_LH_PROJECT/pipeline/dagster/definitions.py"
+    mem_limit: 3g
+
+  # Superset with the EKOS module. Host network so it reaches Ollama and `ekos mcp serve` on
+  # loopback; it binds 127.0.0.1:18098. The marts directory is mounted read-only.
+  superset:
+    image: ekos-duckdemo/superset:4.1.1-ekos-a3ba592
+    profiles: ["bi"]
+    network_mode: host
+    environment:
+      SUPERSET_BIND_ADDRESS: 127.0.0.1
+      SUPERSET_PORT: "18098"
+      SUPERSET_CONFIG_PATH: /app/pythonpath/superset_config.py
+      SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
+      EKOS_MCP_URL: http://127.0.0.1:8711/mcp
+      EKOS_MCP_TOKEN: ${EKOS_MCP_TOKEN}
+      EKOS_AI_KEY: ollama
+      EKOS_AI_MODEL: ${EKOS_AI_MODEL}
+      EKOS_AI_BASE_URL: http://127.0.0.1:11434
+      EKOS_AI_TABLES: ${EKOS_AI_TABLES:-}
+    volumes:
+      - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro
+      - superset-home:/app/superset_home
+      - ${EKOS_LH_PROJECT}/pipeline/.lakehouse/marts:/marts:ro
+    mem_limit: 2g
+
+volumes:
+  source-data:
+  s3-data:
+  superset-home:

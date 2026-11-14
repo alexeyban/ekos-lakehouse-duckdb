@@ -1,0 +1,8 @@
+{
+  "name": "unused-branch",
+  "rationale": "The code handles a value the data does not hold today. Nothing contradicts: the branch is unused in this database, which the profile shows.",
+  "match": {
+    "conflict_type": "code_vs_data"
+  },
+  "decision": "both_valid"
+}

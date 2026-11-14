@@ -1,0 +1,47 @@
+# Step 3, scope: the tables the lakehouse takes (design decision 3 of the plan: sales, purchasing and
+# receivables). Every other table is reviewed out of scope with a reason (scripts/step3-review.sh).
+# The first 33 are the Oracle demo's sales subset; the rest add purchasing and receivables.
+ad_client
+ad_org
+ad_user
+c_allocationhdr
+c_allocationline
+c_bpartner
+c_bpartner_location
+c_bp_group
+c_charge
+c_country
+c_currency
+c_doctype
+c_invoice
+c_invoiceline
+c_invoicetax
+c_location
+c_order
+c_orderline
+c_ordertax
+c_payment
+c_paymentterm
+c_region
+c_tax
+c_taxcategory
+c_uom
+m_inout
+m_inoutline
+m_pricelist
+m_pricelist_version
+m_product
+m_product_category
+m_productprice
+m_warehouse
+# purchasing
+m_matchinv
+m_matchpo
+m_requisition
+m_requisitionline
+# receivables and the calendar
+c_invoicepayschedule
+c_bankaccount
+c_period
+c_year
+c_calendar

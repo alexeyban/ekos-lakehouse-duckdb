@@ -1,0 +1,8 @@
+{
+  "name": "code-ahead",
+  "rationale": "The code is iDempiere's master (release iD13) and the database the iD11 seed: columns the code declares and the database lacks are migrations not yet applied. Each side describes its own release; the lakehouse reads the database.",
+  "match": {
+    "conflict_type": "model_column_missing"
+  },
+  "decision": "both_valid"
+}
