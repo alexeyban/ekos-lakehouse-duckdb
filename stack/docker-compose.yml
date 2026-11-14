@@ -74,14 +74,40 @@ services:
 
   # In-memory catalog, as in the ekos-lakehouse sandbox: restarting Polaris empties it and the
   # Iceberg files in S3 are orphaned. `make demo-reset` starts from nothing for that reason.
+  # Polaris's catalog in PostgreSQL, not in memory: the Iceberg tables stay registered across a
+  # restart, and `make snapshot` / `restore` can save the whole lakehouse with the volumes.
+  lh-polaris-db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: polaris
+      POSTGRES_PASSWORD: ${EKOS_LH_POLARIS_SECRET}
+      POSTGRES_DB: polaris
+    volumes:
+      - polaris-data:/var/lib/postgresql/data
+      - ./polaris/00-schema.sql:/docker-entrypoint-initdb.d/00-schema.sql:ro
+    mem_limit: 256m
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U polaris -d polaris"]
+      interval: 3s
+      timeout: 5s
+      retries: 40
+
   lh-polaris:
     image: apache/polaris:1.8.0
     depends_on:
       lh-bucket:
         condition: service_completed_successfully
+      lh-polaris-db:
+        condition: service_healthy
     environment:
       <<: *s3-env
       POLARIS_BOOTSTRAP_CREDENTIALS: POLARIS,root,${EKOS_LH_POLARIS_SECRET}
+      # relational-jdbc bootstraps the realm on first start, once (default: in-memory only)
+      POLARIS_PERSISTENCE_TYPE: relational-jdbc
+      POLARIS_PERSISTENCE_AUTO_BOOTSTRAP_TYPES: relational-jdbc
+      QUARKUS_DATASOURCE_JDBC_URL: jdbc:postgresql://lh-polaris-db:5432/polaris
+      QUARKUS_DATASOURCE_USERNAME: polaris
+      QUARKUS_DATASOURCE_PASSWORD: ${EKOS_LH_POLARIS_SECRET}
       polaris.realm-context.realms: POLARIS
       quarkus.otel.sdk.disabled: "true"
     ports:
@@ -200,5 +226,6 @@ services:
 
 volumes:
   source-data:
+  polaris-data:
   s3-data:
   superset-home:

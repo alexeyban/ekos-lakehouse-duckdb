@@ -29,16 +29,6 @@ MARTS=(sales_by_category_month open_receivables_by_age purchase_spend_by_vendor)
 run() { scripts/run.sh "$@" >/dev/null; }
 step() { echo "── step $1: $2"; }
 at() { (( from <= $1 )); }
-# The MCP server serves the ledger as it was when it started: restart it after a commit. A killed
-# server holds its port until it has exited, and a new one started before then cannot bind.
-stop_mcp() {
-  local pid
-  [[ -f "$EKOS_DEMO_DATA/mcp.pid" ]] || return 0
-  pid=$(cat "$EKOS_DEMO_DATA/mcp.pid")
-  kill "$pid" 2>/dev/null || return 0
-  for _ in $(seq 1 30); do kill -0 "$pid" 2>/dev/null || return 0; sleep 1; done
-  echo "MCP server $pid did not stop" >&2; return 1
-}
 
 # The ledger, from build to commit. The console's Init & compile resolves with --force: an open
 # identity conflict is listed for review instead of stopping the run.
@@ -131,7 +121,7 @@ if at 8; then
   run step8b-build "${L[@]}" marts build --mart "$m" --wait
   run step8b-reconcile "${L[@]}" marts reconcile --mart "$m"
   compile_all step8b
-  stop_mcp
+  scripts/mcp-stop.sh               # the server reads the ledger as it was at its start
   make mcp
   run step8-ask-b-after python3 scripts/ask.py "Revenue by customer and product category this year"
 fi

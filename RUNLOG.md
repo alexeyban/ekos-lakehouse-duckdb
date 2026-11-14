@@ -133,3 +133,27 @@ Every deviation, failure and fix of the demo runs, in order. Command output is i
   (one random draw per product pick instead of one per candidate row shifts the sequence); the next pass
   is the first on these rows. Note: pass 1 applied the script by hand to a running source, pass 2 from the
   init script, which is the likeliest reason their plans (and products) differed.
+
+## 2026-11-14, plan v2 (chapter 9) groundwork
+
+- Polaris kept its catalog in memory: any restart (or a restore of the other volumes) lost every Iceberg
+  table registration. Now `relational-jdbc` on a small PostgreSQL (`lh-polaris-db`, volume `polaris-data`),
+  realm bootstrapped on first start (`POLARIS_PERSISTENCE_AUTO_BOOTSTRAP_TYPES`). Its schema must exist
+  before Polaris connects (`stack/polaris/00-schema.sql`; without it: "no schema has been selected to create
+  in"). Tested in scratch containers: a catalog survives a Polaris restart. Takes effect from the next reset.
+- X12: `make snapshot NAME=x` / `make restore NAME=x` (scripts/snapshot.sh, restore.sh): stack stopped,
+  4 volumes + the EKOS home as tars with a SHA-256 manifest under $EKOS_DEMO_DATA/snapshots/; restore moves
+  the current home to trash. Not run yet (needs a stack with persistent Polaris).
+- Scenario A: `stack/source/30-source-changes.sql` (A1 c_invoiceline.promocode added; A2 c_bp_group.value
+  40 → 60; A3 c_order.poreference renamed po_reference; A4 m_product_category.name dropped, CASCADE drops the
+  one view rv_fact_adaxa) and `31-deletes.sql` (A5: the 30 draft invoices, 66 lines, tax). Column choice:
+  a type change needs a column no view uses (most iDempiere columns are in views; c_bp_group.value is not);
+  for the drop, m_product_category.name (1 dependent view, read by the sales mart's category dimension and
+  the dashboard's revenue chart) rather than c_bpartner.name (23 views, used by all three marts).
+  The synthetic script now also makes 30 draft customer invoices (copies of the latest 30, docstatus DR);
+  no mart reads drafts. Both scripts tested on a scratch restore; 30 of 748 invoice keys = 4.0% (< 5%).
+- Scenario B: `stack/source/custom/` (migration 202611201000_XX-LOYALTY.sql: xx_loyalty_account,
+  xx_loyalty_txn, xx_loyalty_post + trigger xx_loyalty_award on c_invoice; backfill.sql). Tested: backfill
+  293 transactions / 18172 points; completing a draft posts one more (the trigger needed
+  `SET search_path = adempiere` on the functions: a session without it did not find xx_loyalty_post).
+- `make change-a`, `make change-b`.

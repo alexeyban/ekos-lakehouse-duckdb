@@ -203,8 +203,38 @@ BEGIN
   END LOOP;
 END $$;
 
+-- 30 draft customer invoices (docstatus DR, not processed), copies of the latest 30 synthetic sales
+-- invoices (October–November 2026) with their lines and tax. No mart reads a draft (every mart filters
+-- docstatus = 'CO'); they are there so that chapter 9's scenario A5 can delete them in the source
+-- without a deletion marker and show `lakehouse deletes` finding them, with the totals unchanged.
+DO $$
+DECLARE
+  marker CONSTANT text := 'synthetic (ekos-lakehouse-duckdb) draft';
+  src record; n int := 0; new_inv int := 5900000; new_line int := 5900000;
+BEGIN
+  FOR src IN SELECT * FROM c_invoice
+              WHERE description = 'synthetic (ekos-lakehouse-duckdb)' AND issotrx = 'Y'
+              ORDER BY c_invoice_id DESC LIMIT 30 LOOP
+    n := n + 1; new_inv := new_inv + 1;
+    PERFORM pg_temp.copy_row('c_invoice', to_jsonb(src), jsonb_build_object(
+      'c_invoice_id', new_inv, 'c_invoice_uu', md5('draft' || new_inv)::uuid::text,
+      'documentno', 'D' || (690000 + n), 'description', marker,
+      'docstatus', 'DR', 'docaction', 'CO', 'processed', 'N', 'posted', 'N', 'ispaid', 'N',
+      'c_order_id', NULL));
+    INSERT INTO c_invoiceline SELECT (jsonb_populate_record(NULL::c_invoiceline, to_jsonb(l) || jsonb_build_object(
+        'c_invoiceline_id', new_line + row_number() OVER (ORDER BY l.line),
+        'c_invoiceline_uu', md5('dline' || (new_line + row_number() OVER (ORDER BY l.line)))::uuid::text,
+        'c_invoice_id', new_inv, 'c_orderline_id', NULL, 'processed', 'N'))).*
+      FROM c_invoiceline l WHERE l.c_invoice_id = src.c_invoice_id;
+    new_line := new_line + (SELECT count(*) FROM c_invoiceline WHERE c_invoice_id = src.c_invoice_id);
+    INSERT INTO c_invoicetax SELECT (jsonb_populate_record(NULL::c_invoicetax, to_jsonb(t) || jsonb_build_object(
+        'c_invoice_id', new_inv, 'c_invoicetax_uu', md5('dtax' || new_inv)::uuid::text, 'processed', 'N'))).*
+      FROM c_invoicetax t WHERE t.c_invoice_id = src.c_invoice_id;
+  END LOOP;
+END $$;
+
 -- What was added, as the restore log shows it.
-SELECT issotrx, extract(year FROM dateinvoiced)::int AS year, count(*) AS invoices,
+SELECT issotrx, docstatus, extract(year FROM dateinvoiced)::int AS year, count(*) AS invoices,
        sum(grandtotal) AS grand_total, sum(CASE WHEN ispaid = 'Y' THEN 0 ELSE grandtotal END) AS open_amount
   FROM c_invoice WHERE description LIKE 'synthetic (ekos-lakehouse-duckdb)%'
- GROUP BY 1, 2 ORDER BY 1, 2;
+ GROUP BY 1, 2, 3 ORDER BY 1, 2, 3;
