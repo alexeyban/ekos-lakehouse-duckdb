@@ -16,7 +16,7 @@ IDEMPIERE_SRC  ?= $(HOME)/PycharmProjects/idempiere
 IDEMPIERE_DOCS ?= $(EKOS_DEMO_DATA)/src/idempiere-docs
 export IDEMPIERE_SRC IDEMPIERE_DOCS
 
-.PHONY: seed venv demo-up project orchestrator bi mcp demo-run demo-reset status snapshot restore change-a change-b
+.PHONY: seed venv demo-up project orchestrator bi mcp demo-run demo-reset status snapshot restore change-a change-b schedule-fast schedule-hourly
 
 seed:            ## the iDempiere 12 seed (GardenWorld), dumped once from a running iDempiere database
 	@test -s $(EKOS_DEMO_DATA)/seed/idempiere.dump || { echo "put a pg_dump -Fc of iDempiere at $(EKOS_DEMO_DATA)/seed/idempiere.dump"; exit 1; }
@@ -80,3 +80,9 @@ change-a:        ## chapter 9 A: the ERP update (A1–A4) and the deleted drafts
 change-b:        ## chapter 9 B: the loyalty customization (two tables, a routine) and its backfill
 	$(SOURCE_SQL) < stack/source/custom/migration/postgresql/202611201000_XX-LOYALTY.sql
 	$(SOURCE_SQL) < stack/source/custom/backfill.sql
+
+schedule-fast:   ## the take's schedule (every 10 minutes): re-planned and approved with the reason, schedules on
+	scripts/schedule.sh fast
+
+schedule-hourly: ## back to the project's hourly schedule
+	scripts/schedule.sh hourly

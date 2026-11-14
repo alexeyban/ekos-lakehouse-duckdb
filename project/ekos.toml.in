@@ -62,6 +62,9 @@ licences = { "idempiere-db" = "GPL-2.0" }
 
 # ── Steps 4–7: EKOS Lakehouse ──────────────────────────────────────────────────────────────────
 [extensions.lakehouse]
+# The scheduled run (sync → bronze → silver → gold publish → health). Part of the approved plan: a
+# change is re-planned and approved again (scripts/schedule.sh). The take uses a shorter one, and says so.
+bronze-schedule = "0 * * * *"
 require-signoff = true                     # steps 4–7 refuse to write without step 3 signed off
 require-plan-approval = true               # generate builds only the plan step 5 approved
 trino-url = "http://127.0.0.1:58180"
