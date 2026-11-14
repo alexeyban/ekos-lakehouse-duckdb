@@ -4,7 +4,7 @@ grain:
 - month
 - product_category
 dimensions:
-  month: month of c_invoice.dateinvoiced
+  month: month of c_invoice.dateinvoiced via c_invoiceline.c_invoice_id
   product_category: m_product_category.name via c_invoiceline.m_product_id, m_product.m_product_category_id
 measures:
   revenue: sum of c_invoiceline.linenetamt

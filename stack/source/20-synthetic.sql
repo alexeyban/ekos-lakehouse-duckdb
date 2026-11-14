@@ -32,15 +32,15 @@ DECLARE
   -- templates: the seed's own documents
   t_so   jsonb := (SELECT to_jsonb(o) FROM c_order o WHERE c_order_id = 100);
   t_sol  jsonb := (SELECT to_jsonb(l) FROM c_orderline l WHERE c_orderline_id = 100);
-  t_sot  jsonb := (SELECT to_jsonb(t) FROM c_ordertax t WHERE c_order_id = 100 LIMIT 1);
+  t_sot  jsonb := (SELECT to_jsonb(t) FROM c_ordertax t WHERE c_order_id = 100 ORDER BY c_tax_id LIMIT 1);
   t_po   jsonb := (SELECT to_jsonb(o) FROM c_order o WHERE c_order_id = 104);
   t_pol  jsonb := (SELECT to_jsonb(l) FROM c_orderline l WHERE c_orderline_id = 105);
-  t_pot  jsonb := (SELECT to_jsonb(t) FROM c_ordertax t WHERE c_order_id = 104 LIMIT 1);
+  t_pot  jsonb := (SELECT to_jsonb(t) FROM c_ordertax t WHERE c_order_id = 104 ORDER BY c_tax_id LIMIT 1);
   t_ari  jsonb := (SELECT to_jsonb(i) FROM c_invoice i WHERE c_invoice_id = 109);
-  t_aril jsonb := (SELECT to_jsonb(l) FROM c_invoiceline l WHERE c_invoice_id = 109 LIMIT 1);
+  t_aril jsonb := (SELECT to_jsonb(l) FROM c_invoiceline l WHERE c_invoice_id = 109 ORDER BY line LIMIT 1);
   t_arit jsonb := (SELECT to_jsonb(t) FROM c_invoicetax t WHERE c_invoice_id = 109);
   t_api  jsonb := (SELECT to_jsonb(i) FROM c_invoice i WHERE c_invoice_id = 106);
-  t_apil jsonb := (SELECT to_jsonb(l) FROM c_invoiceline l WHERE c_invoice_id = 106 LIMIT 1);
+  t_apil jsonb := (SELECT to_jsonb(l) FROM c_invoiceline l WHERE c_invoice_id = 106 ORDER BY line LIMIT 1);
   t_apit jsonb := (SELECT to_jsonb(t) FROM c_invoicetax t WHERE c_invoice_id = 106);
   t_pay  jsonb := (SELECT to_jsonb(p) FROM c_payment p WHERE c_payment_id = 100);
   t_alh  jsonb := (SELECT to_jsonb(h) FROM c_allocationhdr h WHERE c_allocationhdr_id = 100);
@@ -56,7 +56,7 @@ DECLARE
   d date; month_start date; n_docs int; season numeric; growth numeric;
   bp int; loc int; is_sale boolean; n_lines int; p record; qty numeric; amt numeric;
   total numeric; tax_rate numeric; tax_id int; paid_on date; k int; r numeric; acc numeric;
-  ts timestamptz; due_days int;
+  ts timestamptz; due_days int; pick numeric;
 BEGIN
   PERFORM setseed(0.4242);
   month_start := first_day;
@@ -103,11 +103,18 @@ BEGIN
       n_lines := CASE WHEN is_sale THEN 1 + floor(random() * 4)::int ELSE 2 + floor(random() * 3)::int END;
       total := 0;
       FOR i IN 1 .. n_lines LOOP
+        -- one draw per line, then the product at that position by id: `ORDER BY random()` drew
+        -- one number per row in scan order, which a different plan changes (pass 1 ≠ pass 2)
+        pick := random();
         SELECT pr.m_product_id, pr.c_uom_id, pp.pricestd, pp.pricelist, pp.pricelimit INTO p
           FROM m_product pr JOIN m_productprice pp USING (m_product_id)
          WHERE pp.m_pricelist_version_id = CASE WHEN is_sale THEN 104 ELSE 103 END
            AND pr.m_product_id BETWEEN 123 AND 144 AND pp.pricestd > 0
-         ORDER BY random() LIMIT 1;
+         ORDER BY pr.m_product_id
+        OFFSET floor(pick * (SELECT count(*) FROM m_product pr JOIN m_productprice pp USING (m_product_id)
+                             WHERE pp.m_pricelist_version_id = CASE WHEN is_sale THEN 104 ELSE 103 END
+                               AND pr.m_product_id BETWEEN 123 AND 144 AND pp.pricestd > 0))
+         LIMIT 1;
         qty := CASE WHEN is_sale THEN 1 + floor(random() * 12) ELSE 5 + 5 * floor(random() * 3) END;
         amt := round(qty * p.pricestd, 2);
         total := total + amt;

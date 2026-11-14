@@ -111,3 +111,25 @@ Every deviation, failure and fix of the demo runs, in order. Command output is i
   the RFC 0255 pins for the PostgreSQL reconcile SQL (EKOS a1d4ce0e's COLLATE "C"; 8 reconcile lines
   only). `status` → trusted, data as of 2026-11-14 17:01 UTC; `publish-health` wrote the certification
   ("EKOS (pipeline health)") and the header onto the dashboard.
+- 2026-11-14T17:50:53Z make demo-reset (user approved): 3 volumes removed, home moved to /var/tmp/ekos-duckdemo/trash/home-20261114T185047. Pass 2: scripts/demo-run.sh.
+- 2026-11-14T19:06:40Z pass 2 step 4: approve refused, 1 open question (which key path reaches c_invoice). project/marts/sales_by_category_month.md lacked the answer pass 1 gave by hand; added `via c_invoiceline.c_invoice_id` to month. Resumed with --from 4.
+- 2026-11-14T19:23:56Z pass 2 step 7: sales_by_category_month revenue 308227.75 (= silver), pass 1 had 319628.15. Same synthetic document counts (276/298 sales, 72/75 purchases) but other amounts: the product pick `ORDER BY random() LIMIT 1` drew a random number per row in scan order, so a different plan gave different products. The seed comment's 'every reset produces the same rows' was not true. Fixed in stack/source/20-synthetic.sql (one draw, product by id at that offset; template picks ordered). Pass 2 keeps its data; the fix is checked by two scratch restores.
+- 2026-11-14T20:05:00Z pass 2 step 8b: `make mcp` failed (curl exit 7): the killed MCP server still held 127.0.0.1:8711, the new one could not bind, the warm-up reached the dying one. Fix in scripts/demo-run.sh: stop_mcp waits for the old process to exit. Rest of step 8 and step 9 run by hand with the script's commands.
+- Pass 2 step 8: llama3 read "this year" as 2023 — Ask (a) 0 rows; Ask (b) after the customer change summed
+  from 2023-01-01 (2025 + 2026). The fork's prompts never gave the date (pass 1 guessed 2026). With the
+  user's decision, fixed in the fork: ekos-superset 1269830f9e (`<today>` in the prompt; relative periods
+  from CURRENT_DATE; test). Image ekos-duckdemo/superset:4.1.1-ekos-1269830. Re-asked: (a) 65 rows, (b) 36
+  rows, both summing to 159387.15 = the source's 2026 sales (c_invoice issotrx='Y', 2026, totallines).
+  The first (a) re-ask timed out: steps 9's commands had changed the ledger, so the MCP server's export
+  was cold again (the known 35–41 s ossie export against Superset's 30 s).
+- Pass 2 results: step 6 Dagster run ac92d65d SUCCESS in 470 s, first try. Step 7 reconciled: revenue
+  308227.75, open 44861.72 / 75, spend 111695.18 / 151 (amounts differ from pass 1: the synthetic data
+  fix above). Step 8 (c) impossible; (b) before the change refused by L001 (no column customer).
+  Step 9: CFO Dashboard trusted, data as of 2026-11-14 19:13 UTC, certification written.
+  Workflow: 1, 3, 4, 5, 7 done; 2 partial (not published); 6 partial (40 built, 2 warn tests).
+- Synthetic data fix checked: the seed restored into two scratch postgres:16 containers, the new
+  20-synthetic.sql applied to each — identical rows (sales 567 invoices, totallines 323352.80; purchases
+  143, 93821.45; md5 over every synthetic invoice and invoice line equal). The counts differ from pass 1/2
+  (one random draw per product pick instead of one per candidate row shifts the sequence); the next pass
+  is the first on these rows. Note: pass 1 applied the script by hand to a running source, pass 2 from the
+  init script, which is the likeliest reason their plans (and products) differed.
