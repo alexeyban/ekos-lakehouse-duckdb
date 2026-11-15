@@ -165,3 +165,22 @@ Every deviation, failure and fix of the demo runs, in order. Command output is i
   Also: demo.env names the variables the DuckDB edit gates read (RFC 0260), `make venv` installs DuckDB
   1.5.6's httpfs and iceberg extensions on the host (only 1.5.5's were there).
 - Pass 3 restarted from `make demo-reset`.
+
+## 2026-11-14/15, pass 3 (persistent Polaris, drafts and credit memos, Superset 1269830)
+
+- All steps ran from `make demo-reset` without a hand fix. Step 1 commit 4164 s (pass 2: 2981 s). Step 6
+  Dagster run 509 s. Step 7 reconciled: revenue 324286.35, open 36545.09 / 69, spend 100770.45 / 147.
+- Step 8 (a): `DATE_TRUNC('YEAR', CURRENT_DATE)`, 66 rows, 173193.40 = 2026 invoice lines 172770.25 + the
+  credit memos' 423.15 (counted as revenue: scenario C2's subject). (c) impossible. (b) after the customer
+  change: 36 rows, 173193.40.
+- Step 8 (b) before the change: **status failed**. The model's first draft joined two marts on month;
+  EKOS's check rejected it. The repair kept a join between the marts (on DATE_TRUNC of both months) and
+  wrote `'Unknown' AS customer` — a literal standing in for the column the mart lacks — and passed the
+  check; DuckDB then refused `DATE_TRUNC('YEAR', '2026-01-01')`. Had it run, the answer would have been
+  wrong. Product finding (fork/EKOS): a join between tables with no declared join, and a literal named as
+  the column the question asks for, are not blocked. Pass 1: wrong fan-out rows; pass 2: refused (L001);
+  pass 3: failed — three passes, three outcomes.
+- Step 9: CFO Dashboard trusted, data as of 2026-11-14 23:21 UTC. Workflow 1, 3, 4, 5, 7 done.
+- `make snapshot NAME=chapter8`: 71 s, 1.5 GB. After the stack restart Polaris kept the catalog
+  (silver c_invoice 760 rows = 748 invoices + 12 credit memos). The snapshot did not restart the MCP
+  server; fixed in scripts/snapshot.sh.

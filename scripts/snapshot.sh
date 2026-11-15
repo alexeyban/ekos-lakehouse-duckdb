@@ -31,4 +31,6 @@ echo "saved the EKOS home"
 { echo "taken $(date -u +%FT%TZ)"; echo "services $running"
   (cd "$dest" && sha256sum ./*.tar); } > "$dest/MANIFEST"
 "${compose[@]}" up -d --wait $running
+# The MCP server was stopped with the stack: Superset's Ask needs it again.
+[[ " $running " == *" superset "* ]] && make --no-print-directory mcp
 du -sh "$dest"
