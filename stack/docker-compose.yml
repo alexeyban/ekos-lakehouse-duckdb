@@ -204,7 +204,7 @@ services:
   # Superset with the EKOS module. Host network so it reaches Ollama and `ekos mcp serve` on
   # loopback; it binds 127.0.0.1:18098. The marts directory is mounted read-only.
   superset:
-    image: ekos-duckdemo/superset:4.1.1-ekos-1269830
+    image: ekos-duckdemo/superset:4.1.1-ekos-63a734d
     profiles: ["bi"]
     network_mode: host
     environment:

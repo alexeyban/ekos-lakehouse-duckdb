@@ -260,3 +260,57 @@ Commands and output in runs/2026-11-15-chapter9/.
 - Fourth mart `loyalty_points_by_group_month` from project/marts: resolved (4 terms, 0 questions), approved,
   proposed, merged, built (Dagster), reconciled: points 18214, transactions 305 = silver.
   Not done in this dry run: the chart on the dashboard.
+
+## 2026-11-15, the chapter 9 gaps fixed, checked from `make restore NAME=chapter8` (runs/2026-11-15-fixes/)
+
+Binary: ekos-lakehouse rfc0260 working tree built against the local EKOS working tree (RFC 0260 §2.5, not
+committed yet); Superset image `4.1.1-ekos-l013` (the fork blocks L013). Restore 1 min 37 s.
+- Gap 1 (Ask guard): chapter8 is after step 8b, so the mart has `customer` and (b) answered correctly 3 of 3
+  (`SUM(revenue)` by customer and category from `sales_by_category_month`, `CURRENT_DATE`). The pass 3
+  repair SQL through `sql check --dialect duckdb`: L002 (the `DATE_TRUNC` join), L013 (`'Unknown' AS
+  customer`), L014 (`DATE_TRUNC('YEAR', '2026-01-01')`) — all three now reported; the fork blocks L002/L013.
+- Gap 2: `make change-b` without the grant, `lakehouse sync`: "no changes" (exit 0; before: permission
+  denied, sync failed). `lakehouse plan`: `REFUSED adempiere.xx_loyalty_account` / `xx_loyalty_txn`, "the
+  source user may not read it (no SELECT privilege)", 42 tables planned.
+- Gap 4, first half: after the grant, sync: "no changes" — the review never saw the two tables, so they are
+  outside the signed scope (before: applied as `new_table` at once).
+- Re-analysis (`source add custom`, build → commit): recover 325 s, commit 423 s, all exit 0.
+- Gap 3: `review scope xx_loyalty_account xx_loyalty_txn --in` (scope sign-off now stale), `lakehouse
+  plan`: 42 tables planned, "until then the plan keeps the deployed plan's tables" (before: all 902).
+- Scope signed again (digest fb76c9b1…, the dry run's). Conflicts and write-behaviour were stale again: the
+  no-model-class rule decided the 2 new `model_class` items, both signed again.
+- Gap 4, second half: `lakehouse sync`: `waiting new_table adempiere.xx_loyalty_account` / `xx_loyalty_txn`,
+  "not built before the plan has it" (require-plan-approval). `plan`: 44 tables; approved; `generate`.
+- Gap 7: `generate` printed "Dagster reloaded the pipeline's code location"; `lakehouse run --wait` with no
+  `make orchestrator`: run fb83afb7 SUCCESS 460 s (before: the first run failed in silver).
+- Gap 8: C1 `marts edit --add-measure quantity`: "additive edit — the approval carries forward"; requirement
+  `approved`; propose, merge, build, reconcile with no second approval: revenue 324286.35, quantity 9402, both
+  = silver.
+- Gaps 5 and 6 (`make change-a` on top of the above, then `lakehouse sync`): `applied widening
+  adempiere.c_bp_group.value` (lock now `character varying(60)`), `applied new_nullable_column …promocode`;
+  rename and drop proposed. Impact: "silver `adempiere__c_order.poreference` reads it", "silver
+  `adempiere__m_product_category.name` reads it — tests: not_null", plus the gold dimension and the CFO
+  Dashboard chart. The committing sync reloaded Dagster; `lakehouse run --wait` SUCCESS 470 s.
+- State left: chapter 8 + B (loyalty tables loaded) + C1 + A's sync (two proposals open). `make restore
+  NAME=chapter8` goes back. The earlier binary is kept as `target/release/ekos-lakehouse.c4b0c51`.
+
+## 2026-11-15, the remaining chapter 9 items (runs/2026-11-15-fixes/ 042–059)
+
+- First try of two proposals merged back to back (on the state above): still `CONFLICT in .generated.json`. Two
+  causes: every proposal changes the manifest line of `lakehouse.lock.json`, and of the schema's single silver
+  YAML. And a product bug found on the way: `generate --from-lock` (the installer's upgrade step) rendered silver
+  **without step 3's masks** (my run committed unmasked models for ad_user, c_payment and others; the proposals
+  then masked them again). Fixed in ekos-lakehouse (lock out of the manifest, one YAML per model, `--from-lock`
+  takes the last plan's masks); stack restored to chapter8.
+- `generate --from-lock` on chapter8: 44 files (42 per-model YAML, the per-schema one removed, the manifest), no
+  silver SQL changed. `make change-a`, `sync` (2 proposals), both merged one after the other: no conflict.
+- X5: whole plan approved; `extraction change` c_tax and c_uom to full; `approve --table adempiere.c_tax`;
+  `generate`: "held: adempiere.c_uom: its change is not approved; the deployed version is kept", c_tax full,
+  c_uom still incremental.
+- X4: `review show scope --changed`: "nothing changed since the sign-off"; after `review scope c_job --in`:
+  `[changed] c_job …`.
+- Stack restored to chapter8 afterwards.
+
+### 2026-11-15 — committed
+- EKOS 973e0f7f (L013/L014, `review show --changed`, RFC 0260); Superset fork 63a734da01 (blocks L013).
+  The image `4.1.1-ekos-l013` is retagged `4.1.1-ekos-63a734d` (same image) and the compose file names it.
