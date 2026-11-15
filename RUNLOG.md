@@ -213,3 +213,20 @@ Commands and output in runs/2026-11-15-chapter9/.
   tables, bronze, silver, gold publish). Reconcile: revenue 324286.35 = silver. `dashboards sync` +
   `status`: CFO Dashboard **trusted** again, data as of 2026-11-15 00:41 UTC. Scenario A end to end, with the
   findings above (A2 silent, silver impact empty, A5 by full load, second proposal conflicts until a sync).
+
+## 2026-11-15, chapter 9 scenario C dry run (from `make restore NAME=chapter8`, 1 min 55 s; runs/2026-11-15-chapter9c/)
+
+- Restore checked: source has m_product_category.name again, 760 invoices in source and silver, pipeline at
+  aab3274, dashboard trusted.
+- C1 (additive) `marts edit --step 11 --add-measure quantity --definition "sum of c_invoiceline.qtyinvoiced"`:
+  gates in DuckDB (RFC 0260 X7: "DuckDB plans the edited mart", grain unique in DuckDB), reconciliation in
+  Trino, totals (X8): revenue no change, quantity 9402 (new). The plan's C1 ("discount amount and percent")
+  is not expressible: GardenWorld's synthetic lines have no discount; quantity stands in.
+- C2 (modifying) `--add-filter "c_doctype.docbasetype <> 'ARC'"`: EKOS asked which of 18 key paths reaches
+  c_doctype, then which of 2; answered `via c_invoiceline.c_invoice_id, c_invoice.c_doctype_id`. Preview:
+  revenue before 324286.35 → after 323863.20 (−423.15 = the 12 credit memos), quantity 9402 → 9390 (−12).
+  Recorded with `--confirm`.
+- Approve, propose, merge, build (Dagster 40 s), reconcile: revenue 323863.20, quantity 9390, both = silver.
+- Difference from the plan: C1 is not "applied without a review": every edit, additive too, makes the
+  requirement need approval again (the project sets require-signoff / require-plan-approval).
+  Not tried: Ask about revenue afterwards "saying since when" (the 8b path refreshes the ledger and MCP).
