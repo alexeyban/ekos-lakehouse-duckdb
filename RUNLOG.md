@@ -230,3 +230,33 @@ Commands and output in runs/2026-11-15-chapter9/.
 - Difference from the plan: C1 is not "applied without a review": every edit, additive too, makes the
   requirement need approval again (the project sets require-signoff / require-plan-approval).
   Not tried: Ask about revenue afterwards "saying since when" (the 8b path refreshes the ledger and MCP).
+
+## 2026-11-15, chapter 9 scenario B dry run (from `make restore NAME=chapter8`; runs/2026-11-15-chapter9b/)
+
+- `make change-b`: migration + backfill (305 transactions, 18214 points).
+- `lakehouse sync` failed: "permission denied for table xx_loyalty_account" — ekos_ro had SELECT on the
+  tables of day one only. Demo fix: `GRANT SELECT` on the two tables and `ALTER DEFAULT PRIVILEGES … GRANT
+  SELECT ON TABLES TO ekos_ro` (now in stack/source/10-idempiere.sh). Product finding: one unreadable new
+  table fails the whole sync (in a scheduled run, every table).
+- After the grant, sync **applied** both as `new_table`. Plan step 1 expected them to wait outside the
+  approved scope; sync adds new tables to the deployed plan at once, also with require-plan-approval.
+- `source add custom` + build/recover/resolve/compile/commit (X3): 6 + 345 + 15 + 44 + 460 s ≈ 14.5 min
+  (the first analysis's commit alone: 4164 s). Ledger: Procedure xx_loyalty_post, Trigger xx_loyalty_award;
+  `interaction matrix --table xx_loyalty_txn`: routine:xx_loyalty_post read + insert (declared).
+- Review (X4): scope, conflicts, write-behaviour stale; a stale sign-off states its delta ("2 added, 0
+  removed, 0 changed — e.g. xx_loyalty_account"); conflicts said "2 added, 33 changed". `review show` has no
+  flag that lists only the changed items (`--undecided` lists old dismissed items).
+- The demo's step-3 rules put the new tables out of scope. `review scope … --in`, then **before the scope
+  was signed again, `lakehouse plan` planned every table of the source** (161 full, 741 incremental, out of
+  scope 0): with the scope sign-off stale, the plan used no scope. Product finding: plan with a stale scope
+  should keep the last signed scope or refuse. Nothing was approved from it. Scope-in also made conflicts and
+  write-behaviour stale (signed again, 0 blocking).
+- Plan (X5): exactly the two loyalty tables "new since the approval" (incremental, deletes audited weekly);
+  the approval is still of the whole plan. Approve, generate.
+- First run (a67dfc5e) FAILED in silver: Dagster still had the code location from before `generate`, so no
+  bronze assets for the new tables, and dbt's silver models for them found no bronze table. `make
+  orchestrator` (reload), second run b192a781 SUCCESS 460 s. Finding (demo + docs): after `generate`
+  reload the code location; the silver build should not include models whose bronze has never loaded.
+- Fourth mart `loyalty_points_by_group_month` from project/marts: resolved (4 terms, 0 questions), approved,
+  proposed, merged, built (Dagster), reconciled: points 18214, transactions 305 = silver.
+  Not done in this dry run: the chart on the dashboard.

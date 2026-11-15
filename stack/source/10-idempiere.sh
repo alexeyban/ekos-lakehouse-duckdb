@@ -14,6 +14,7 @@ psql -v ON_ERROR_STOP=1 -U postgres -d idempiere \
   -c "GRANT CONNECT ON DATABASE idempiere TO ekos_ro" \
   -c "GRANT USAGE ON SCHEMA adempiere TO ekos_ro" \
   -c "GRANT SELECT ON ALL TABLES IN SCHEMA adempiere TO ekos_ro" \
+  -c "ALTER DEFAULT PRIVILEGES IN SCHEMA adempiere GRANT SELECT ON TABLES TO ekos_ro" \
   -c "GRANT pg_read_all_stats TO ekos_ro" \
   -c "ALTER ROLE ekos_ro SET default_transaction_read_only = on" \
   -c "CREATE EXTENSION IF NOT EXISTS pg_stat_statements"
