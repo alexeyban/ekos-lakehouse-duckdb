@@ -184,3 +184,32 @@ Every deviation, failure and fix of the demo runs, in order. Command output is i
 - `make snapshot NAME=chapter8`: 71 s, 1.5 GB. After the stack restart Polaris kept the catalog
   (silver c_invoice 760 rows = 748 invoices + 12 credit memos). The snapshot did not restart the MCP
   server; fixed in scripts/snapshot.sh.
+
+## 2026-11-15, chapter 9 scenario A dry run (from snapshot chapter8; ekos-lakehouse c4b0c51, RFC 0260)
+
+Commands and output in runs/2026-11-15-chapter9/.
+- `make change-a`, then `lakehouse run --wait` (the job the schedule starts; run df5bd78a, 520 s, SUCCESS):
+  - A1 `c_invoiceline.promocode`: applied automatically (commit "apply 1 safe change(s)").
+  - A2 `c_bp_group.value` varchar(40) → (60): **not reported**. The plan keeps `character varying(40)`;
+    both map to Iceberg `varchar`, and the change is not recorded either. Finding (lakehouse): a
+    source-only widening should be applied and listed as `widening`.
+  - A3 `c_order.poreference` → `po_reference`: `rename`, proposed, c_order paused; impact "no gold mart
+    reads it".
+  - A4 `m_product_category.name` dropped: `drop`, proposed, table paused. Impact (RFC 0260 X1): gold
+    `sales_by_category_month` dimension `product_category`, and dashboard `CFO Dashboard` (1) chart
+    `Revenue by Product Category`. The silver line says "no compiled silver column reads it": the
+    silver lookup reads a ledger compiled from the pipeline repository, which this project does not compile.
+  - Dashboard: trusted → **unverified**, "silver/bronze adempiere.m_product_category is waiting for a schema
+    change to be approved".
+  - A5: the 30 drafts left silver with the next full load (c_invoice 760 → 730, 0 drafts).
+    c_invoice, c_invoiceline and c_invoicetax load in full, so `lakehouse deletes` has no delete plan for
+    them ("deletes leave with the replacement"). Key buckets and tombstones would need deletes on an
+    incremental table with a delete plan (e.g. m_productprice).
+- Maria's decision on A4: `requirements edit` product_category := m_product_category.value (search key),
+  approve. Approval of the source changes = merging the proposal branches: the second merge conflicted in
+  `.generated.json` (both branches built on the same HEAD); `git merge --abort`, `lakehouse sync` rebuilt
+  it on the new HEAD (its impact now "no gold mart reads it"), merged.
+- Mart: propose, merge; then `lakehouse run --wait` (run 8e432855, 510 s, SUCCESS: sync resumed both
+  tables, bronze, silver, gold publish). Reconcile: revenue 324286.35 = silver. `dashboards sync` +
+  `status`: CFO Dashboard **trusted** again, data as of 2026-11-15 00:41 UTC. Scenario A end to end, with the
+  findings above (A2 silent, silver impact empty, A5 by full load, second proposal conflicts until a sync).
