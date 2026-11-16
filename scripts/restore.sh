@@ -7,9 +7,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 name="${1:?usage: scripts/restore.sh <name>}"
-set -a; . stack/demo.env; set +a
-export IDEMPIERE_SRC="${IDEMPIERE_SRC:-$HOME/PycharmProjects/idempiere}"
-export IDEMPIERE_DOCS="${IDEMPIERE_DOCS:-$EKOS_DEMO_DATA/src/idempiere-docs}"
+set -a; . stack/demo.env; . stack/paths.sh; set +a
 src="$EKOS_DEMO_DATA/snapshots/$name"
 [[ -f "$src/MANIFEST" ]] || { echo "no snapshot at $src" >&2; exit 1; }
 (cd "$src" && grep -E '^[0-9a-f]{64} ' MANIFEST | sha256sum -c --quiet) || { echo "snapshot $name is damaged" >&2; exit 1; }

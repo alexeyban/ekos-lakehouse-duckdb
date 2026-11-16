@@ -12,9 +12,7 @@
 # (project/marts/), and the answer to step 4's questions (the description file).
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; . stack/demo.env; set +a
-export IDEMPIERE_SRC="${IDEMPIERE_SRC:-$HOME/PycharmProjects/idempiere}"
-export IDEMPIERE_DOCS="${IDEMPIERE_DOCS:-$EKOS_DEMO_DATA/src/idempiere-docs}"
+set -a; . stack/demo.env; . stack/paths.sh; set +a
 from=0
 [[ "${1:-}" == "--from" ]] && from="${2:?step}"
 if [[ -z "${DEMO_RUN_DIR:-}" ]]; then

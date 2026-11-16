@@ -30,7 +30,7 @@ services:
       - source-data:/var/lib/postgresql/data
       - ./source/10-idempiere.sh:/docker-entrypoint-initdb.d/10-idempiere.sh:ro
       - ./source/20-synthetic.sql:/synthetic/20-synthetic.sql:ro
-      - ${EKOS_DEMO_DATA}/seed:/seed:ro
+      - ${EKOS_DEMO_DATA:?run through make, which sets it}/seed:/seed:ro
     mem_limit: 1g
     healthcheck:
       # Ready only once the seed is restored and the read-only role exists.
@@ -163,7 +163,7 @@ services:
   # Host network: it reaches every service at the loopback ports the project's ekos.toml names,
   # and binds its UI to 127.0.0.1:53200. It runs as the host user (it writes the project's ledger).
   lh-dagster:
-    image: ekos-duckdemo/dagster:1.13.26
+    image: ${DAGSTER_IMAGE:-ekos-duckdemo/dagster:1.13.26}
     profiles: ["orchestrator"]
     network_mode: host
     user: "${EKOS_LH_UID:-1000}:${EKOS_LH_GID:-1000}"
@@ -201,10 +201,10 @@ services:
       - mkdir -p "$$DAGSTER_HOME" && exec dagster dev -h 127.0.0.1 -p 53200 -f "$$EKOS_LH_PROJECT/pipeline/dagster/definitions.py"
     mem_limit: 3g
 
-  # Superset with the EKOS module. Host network so it reaches Ollama and `ekos mcp serve` on
+  # Superset with the EKOS module. Host network so it reaches `ekos mcp serve` on
   # loopback; it binds 127.0.0.1:18098. The marts directory is mounted read-only.
   superset:
-    image: ekos-duckdemo/superset:4.1.1-ekos-63a734d-nonce
+    image: ${SUPERSET_IMAGE:-ekos-duckdemo/superset:4.1.1-ekos}
     profiles: ["bi"]
     network_mode: host
     environment:

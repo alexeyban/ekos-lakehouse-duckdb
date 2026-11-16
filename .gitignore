@@ -3,3 +3,4 @@ runs/
 scripts/__pycache__/
 video/
 docs/linkedin-article/
+stack/local.env

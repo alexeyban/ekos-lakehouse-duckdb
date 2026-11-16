@@ -10,9 +10,7 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 name="${1:?usage: scripts/snapshot.sh <name>}"
 [[ "$name" =~ ^[A-Za-z0-9._-]+$ ]] || { echo "a snapshot name is letters, digits, . _ -" >&2; exit 2; }
-set -a; . stack/demo.env; set +a
-export IDEMPIERE_SRC="${IDEMPIERE_SRC:-$HOME/PycharmProjects/idempiere}"
-export IDEMPIERE_DOCS="${IDEMPIERE_DOCS:-$EKOS_DEMO_DATA/src/idempiere-docs}"
+set -a; . stack/demo.env; . stack/paths.sh; set +a
 dest="$EKOS_DEMO_DATA/snapshots/$name"
 [[ -e "$dest" ]] && { echo "$dest exists: choose another name" >&2; exit 1; }
 compose=(docker compose -f stack/docker-compose.yml --env-file stack/demo.env --profile orchestrator --profile bi)

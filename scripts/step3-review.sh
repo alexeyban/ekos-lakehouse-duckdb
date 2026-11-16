@@ -6,7 +6,7 @@
 #   scripts/step3-review.sh           decide, then sign off every subject
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; . stack/demo.env; set +a
+set -a; . stack/demo.env; . stack/paths.sh; set +a
 : "${DEMO_RUN_DIR:=runs/$(date +%F)}"; export DEMO_RUN_DIR
 LH=("$EKOS_LAKEHOUSE_BIN" --project idemduck)
 BY="${DEMO_REVIEWER:-claude-agent (demo rehearsal)}"

@@ -1,5 +1,9 @@
-# EKOS Lakehouse + DuckDB demo. Paths and local-only credentials: stack/demo.env.
+# EKOS Lakehouse + DuckDB demo. Local-only credentials: stack/demo.env; paths: stack/paths.sh
+# (defaults under ~/.local/share/ekos-duckdemo, overridden by a git-ignored stack/local.env).
 #
+#   make sources      clone iDempiere, its docs, ekos-lakehouse and the Superset fork at the demo's commits
+#   make lakehouse    build the ekos-lakehouse binary from that checkout (unless one is on PATH)
+#   make images       build the Dagster and Superset images the stack runs
 #   make demo-up      the stack: source, SeaweedFS, Polaris, Trino (Dagster and Superset later)
 #   make project      the EKOS project in the demo's home, from project/ekos.toml.in
 #   make demo-run     steps 1–9 from the command line, every command logged under runs/<date>/
@@ -8,15 +12,39 @@
 
 SHELL := /bin/bash
 include stack/demo.env
+$(foreach kv,$(shell bash stack/paths.sh --print),$(eval export $(kv)))
 export
 
 COMPOSE := docker compose -f stack/docker-compose.yml --env-file stack/demo.env
 LH      := $(EKOS_LAKEHOUSE_BIN) --project idemduck
-IDEMPIERE_SRC  ?= $(HOME)/PycharmProjects/idempiere
-IDEMPIERE_DOCS ?= $(EKOS_DEMO_DATA)/src/idempiere-docs
-export IDEMPIERE_SRC IDEMPIERE_DOCS
 
-.PHONY: seed venv demo-up project orchestrator bi mcp demo-run demo-reset status snapshot restore change-a change-b schedule-fast schedule-hourly
+# The commits the recorded demo ran on (2026-11-15/16).
+IDEMPIERE_REF  := 3355eb5fc9403c3827fcd8caf8eb92f78319430e
+DOCS_REF       := d105057e3f381493654ceb1148af169801dd6bbc
+LAKEHOUSE_REF  := 875a5a9
+SUPERSET_REF   := ekos-4.1.1
+
+.PHONY: paths sources lakehouse images seed venv demo-up project orchestrator bi mcp demo-run demo-reset status snapshot restore change-a change-b schedule-fast schedule-hourly
+
+paths:           ## print the paths this machine uses
+	@bash stack/paths.sh --print
+
+# clone <url> <dir> <ref>: a full clone (EKOS reads the git history), checked out at <ref>
+clone = test -d $(2)/.git || git clone $(1) $(2); git -C $(2) fetch -q origin && git -C $(2) checkout -q $(3)
+
+sources:         ## the four checkouts, at the commits the demo ran on (iDempiere is a few GB with history)
+	$(call clone,https://github.com/idempiere/idempiere.git,$(IDEMPIERE_SRC),$(IDEMPIERE_REF))
+	$(call clone,https://github.com/idempiere/idempiere.github.io.git,$(IDEMPIERE_DOCS),$(DOCS_REF))
+	$(call clone,https://github.com/alexeyban/ekos-lakehouse.git,$(EKOS_LAKEHOUSE_SRC),$(LAKEHOUSE_REF))
+	$(call clone,https://github.com/alexeyban/ekos-superset.git,$(SUPERSET_SRC),$(SUPERSET_REF))
+
+lakehouse:       ## ekos-lakehouse from the checkout (Rust toolchain needed); skipped when EKOS_LAKEHOUSE_BIN exists
+	test -x $(EKOS_LAKEHOUSE_BIN) || cargo build --release --manifest-path $(EKOS_LAKEHOUSE_SRC)/Cargo.toml -p ekos-lakehouse
+	$(EKOS_LAKEHOUSE_BIN) --version
+
+images:          ## the Dagster image (ekos-lakehouse/deploy/dagster) and Superset with the EKOS module (the fork's Dockerfile.ekos)
+	docker build -t $(DAGSTER_IMAGE) $(EKOS_LAKEHOUSE_SRC)/deploy/dagster
+	docker build -t $(SUPERSET_IMAGE) -f $(SUPERSET_SRC)/Dockerfile.ekos $(SUPERSET_SRC)
 
 seed:            ## the iDempiere 12 seed (GardenWorld), dumped once from a running iDempiere database
 	@test -s $(EKOS_DEMO_DATA)/seed/idempiere.dump || { echo "put a pg_dump -Fc of iDempiere at $(EKOS_DEMO_DATA)/seed/idempiere.dump"; exit 1; }

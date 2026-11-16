@@ -7,9 +7,7 @@
 #   scripts/schedule.sh hourly    back to the project's own schedule
 set -euo pipefail
 cd "$(dirname "$0")/.."
-set -a; . stack/demo.env; set +a
-export IDEMPIERE_SRC="${IDEMPIERE_SRC:-$HOME/PycharmProjects/idempiere}"
-export IDEMPIERE_DOCS="${IDEMPIERE_DOCS:-$EKOS_DEMO_DATA/src/idempiere-docs}"
+set -a; . stack/demo.env; . stack/paths.sh; set +a
 what="${1:?usage: scripts/schedule.sh fast|hourly}"
 case "$what" in
   fast) cron="*/10 * * * *"; why="every 10 minutes for the recorded take (the project's own schedule is hourly)" ;;

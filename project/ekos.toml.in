@@ -1,6 +1,6 @@
 # The EKOS project behind this demo: iDempiere's code, its documentation site and the GardenWorld
 # database on PostgreSQL (stack/, service lh-source). `make project` renders this file into the
-# demo's EKOS home with the paths from stack/demo.env. No [llm] section: steps 1–3 make no model call.
+# demo's EKOS home with the paths from stack/paths.sh. No [llm] section: steps 1–3 make no model call.
 
 [workspace]
 root = "${IDEMPIERE_SRC}"                 # git clone https://github.com/idempiere/idempiere
