@@ -20,8 +20,8 @@ EKOS_AI_REQUALIFY = True                             # DuckDB ignores a connecti
 EKOS_AI_TABLES = os.environ.get("EKOS_AI_TABLES", "")    # comma list; empty = every compiled mart
 EKOS_AI_BASE_URL = os.environ.get("EKOS_AI_BASE_URL", "http://host.docker.internal:11434")
 EKOS_AI_MODEL = os.environ.get("EKOS_AI_MODEL", "qwen2.5-coder:3b")
-EKOS_AI_KEY_ENV = "EKOS_AI_KEY"                      # Ollama ignores the key; the client wants one
-EKOS_AI_MODEL_TIMEOUT = 300
+EKOS_AI_KEY_ENV = os.environ.get("EKOS_AI_KEY_ENV", "EKOS_AI_KEY")   # the variable holding the key (OpenCode Zen: OPENCODE_API_KEY; Ollama ignores it)
+EKOS_AI_MODEL_TIMEOUT = int(os.environ.get("EKOS_AI_MODEL_TIMEOUT", "60"))   # a hosted model; 300 was for Ollama on a CPU
 EKOS_AI_QUERY_TIMEOUT = 15
 EKOS_AI_PER_USER_PER_DAY = 100
 EKOS_AI_PER_DAY = 500

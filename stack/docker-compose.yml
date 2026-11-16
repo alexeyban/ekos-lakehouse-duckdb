@@ -204,7 +204,7 @@ services:
   # Superset with the EKOS module. Host network so it reaches Ollama and `ekos mcp serve` on
   # loopback; it binds 127.0.0.1:18098. The marts directory is mounted read-only.
   superset:
-    image: ekos-duckdemo/superset:4.1.1-ekos-63a734d
+    image: ekos-duckdemo/superset:4.1.1-ekos-63a734d-nonce
     profiles: ["bi"]
     network_mode: host
     environment:
@@ -214,9 +214,12 @@ services:
       SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY}
       EKOS_MCP_URL: http://127.0.0.1:8711/mcp
       EKOS_MCP_TOKEN: ${EKOS_MCP_TOKEN}
-      EKOS_AI_KEY: ollama
-      EKOS_AI_MODEL: ${EKOS_AI_MODEL}
-      EKOS_AI_BASE_URL: http://127.0.0.1:11434
+      # Ask (AI) through OpenCode Zen (Anthropic Messages API): the key's VALUE comes from the host's
+      # environment at `up` time and is never written to a file; the variable's name is what the fork reads
+      EKOS_AI_MODEL: ${EKOS_AI_MODEL_ZEN:-claude-haiku-5-5}
+      EKOS_AI_BASE_URL: https://opencode.ai/zen
+      EKOS_AI_KEY_ENV: OPENCODE_API_KEY
+      OPENCODE_API_KEY: ${OPENCODE_API_KEY:?set OPENCODE_API_KEY in the shell that runs make bi}
       EKOS_AI_TABLES: ${EKOS_AI_TABLES:-}
     volumes:
       - ./superset/superset_config.py:/app/pythonpath/superset_config.py:ro

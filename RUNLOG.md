@@ -314,3 +314,71 @@ committed yet); Superset image `4.1.1-ekos-l013` (the fork blocks L013). Restore
 ### 2026-11-15 — committed
 - EKOS 973e0f7f (L013/L014, `review show --changed`, RFC 0260); Superset fork 63a734da01 (blocks L013).
   The image `4.1.1-ekos-l013` is retagged `4.1.1-ekos-63a734d` (same image) and the compose file names it.
+
+## 2026-11-15, chapter 9 video take (video/chapter9/; binary = ekos-lakehouse 875a5a9 / EKOS 973e0f7f)
+
+Each scenario from `make restore NAME=chapter8` (1 min 37 s, 1 min 44 s, 1 min 36 s); Dagster schedules off.
+Commands and output per step in video/chapter9/steps/*/ (cmd.sh, output-*.txt, attempt*/).
+- Start: the restored state was 14 h old, so `dashboards status` said **late**; one `lakehouse run --wait`
+  (876e54f5, 480 s) made it trusted (data as of 13:46 UTC). Health 85 healthy, **2 failing** = the two dbt
+  accepted_values tests configured to warn (c_doctype.docbasetype, c_payment.trxtype; day one had the same 2
+  warnings). Finding: health counts a warn-level test as failing.
+- A: sync 96 s: widening + new_nullable applied; rename and drop proposed with impact (silver, gold dimension,
+  CFO Dashboard chart); run 60f0d19c 450 s; 81 healthy / 4 schema pending; dashboard unverified (banner in
+  Superset). Source and silver 730 invoices, 0 drafts. Requirement edit (category := value), approve, two
+  proposal merges with no conflict, mart propose/merge; run 69d707f6 460 s; reconcile revenue 324286.35 equal;
+  dashboard trusted (14:15 UTC).
+- B: change-b (305 txn, 18214 points); sync "no changes"; plan REFUSED both (no SELECT); grant; source add
+  custom; build 5 s, recover 5 min 26 s (21315 passes), resolve 15 s, compile 42 s, commit 7 min 20 s (59
+  objects written, 145978 skipped). `review show --changed`: scope 2 added; write-behaviour 2 added; conflicts
+  2 added + 33 changed (dismissed on day one). no-model-class rule decided the 2; 3 subjects signed (same
+  digests as the dry run). Sync: waiting new_table ×2. Plan 44.
+  **`extraction approve --table` refused: "the last approval was recorded before per-table approvals: approve
+  the whole plan"** (the snapshot's approval predates X5) — whole plan approved. Generate 328 files + the
+  one-time silver YAML split, Dagster reloaded; run 68817aed 480 s; silver 305 / 18214. Fourth mart: 4 terms
+  resolved, 17 atoms, built in 63 s, reconciled points 18214 / transactions 305 equal.
+  Finding: write behaviour gives the loyalty tables update_class=po_only with 0 citations, though the
+  interaction map shows xx_loyalty_post updating xx_loyalty_account: the routine is in a migration script,
+  which write behaviour ignores.
+- C: `marts graph`; C1 add quantity (additive, approval carried forward, 9402); built 67 s, reconciled. C2
+  filter without a path: FAIL compile, 18 foreign-key paths to c_doctype; with `via c_invoiceline.c_invoice_id,
+  c_invoice.c_doctype_id`: revenue 324286.35 → 323863.20 (−423.15), quantity 9402 → 9390; confirmed (a
+  proposal), approved, built 57 s, reconciled equal. `lakehouse spec` lists each change with time and author.
+  Finding: the pipeline repository's approval commits carry the machine's git user as author, not the `--as`
+  approver (the ledger has the approver; `spec` shows it).
+- Video: 16 steps, 16 min 21 s of narration. Not in it: a chart for the loyalty mart, Ask (AI), tombstones.
+
+## 2026-11-15/16, the human cut: the whole demo from scratch through the EKOS console (video/human/)
+
+`make demo-reset` (chapter8 snapshot kept), then day one and day two driven in the console by Playwright as "Maria"
+(every screen a real screenshot, every click recorded with the element's position: video/human/steps/*/actions.json).
+Voice: Kokoro `am_michael`. Ask (AI) model: Claude Haiku 5.5 through OpenCode Zen (the user's instruction; not Ollama).
+- Day one: Init & compile from the console 19:51–20:55 (all stages ok, 0 model calls); census = compiled (902/161/80/1);
+  2 scope decisions by hand + scripts/step3-decide.sh (5 min 46 s) + 6 sign-offs in the Review page; plan 42/0/860, approved;
+  generate 312 files; requirements drafted by llama3 from the CFO's words and corrected in the console (≈30 edits; the
+  model read "completed" as "paid", took dates from the wrong table, measured payments instead of invoices — the last
+  one EKOS calls "resolved"); pipeline run 436 s; 3 marts reconciled (324286.35; 36545.09/69; 100770.45/147);
+  marts file added as a DuckDB source (56 ms, read-only); second analysis ~15 min; marts scoped out, re-signed;
+  Ask (a) 66 rows, (c) refused, (b) impossible → customer dimension added → 36 rows; dashboard built by Ask, trusted.
+  Snapshot `video-day1`.
+- A: sync in the console (2 applied, 2 proposed with impact to the dashboard chart); run 444 s, dashboard unverified;
+  category := search key, two branch merges (git), mart rebuilt; run 430 s; trusted again.
+- B (restore video-day1): sync "no changes"; plan: 862 out of scope, nothing refused (the fresh source has
+  ALTER DEFAULT PRIVILEGES); customization added as a dir source in the console; analysis ~16 min; scope in, 2
+  conflicts decided in the Conflicts page, 3 re-signed; plan 44, approve, generate 328 files, run 462 s; loyalty mart:
+  draft (grain mistake again → redraft), 11 paths → via the account's customer; 18214 points / 305 txn = silver.
+- C (restore video-day1): + quantity (additive, approval carried, 9402); credit memos: 18 paths → via the invoice's
+  doctype; 324286.35 → 323863.20 (−423.15); approved; reconciled.
+Findings:
+- EKOS console (fixed, not committed): in local mode no review decision or sign-off could be recorded (the page showed
+  the name field only in token mode; the API demanded one). Fix: the field whenever no OIDC identity, `local:<name>`.
+- Superset fork (fixed, not committed): the Ask page's inline script had no CSP nonce → blocked by Talisman; the
+  buttons did nothing. Fixed in ask.html (+ test); local image `4.1.1-ekos-63a734d-nonce` (a layer with the template).
+- Init & compile asks a browser confirm (Playwright dismissed it by default: one false start).
+- A grain entry that is not a dimension cannot be removed by any requirements edit (only a redraft).
+- Console extension actions record the approver as "local", not a person; the spec shows "local" as every author.
+- No console button for `dashboards status` / `publish-health`; the Documentation page is not declared by this build.
+- The console page is wider than a 1920 screen (22 tabs, a long SQL line): captured at 2880 px.
+- Dashboard "Objects by kind" answers 500 on a project with nothing compiled.
+- Health counts warn-only dbt tests as failing (2).
+- Demo config: Superset's Ask reads the key's variable name from the environment (EKOS_AI_KEY_ENV) — OpenCode Zen.
